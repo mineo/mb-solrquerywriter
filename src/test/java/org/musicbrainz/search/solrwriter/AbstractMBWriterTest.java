@@ -1,13 +1,21 @@
 package org.musicbrainz.search.solrwriter;
 
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.response.SolrQueryResponse;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.musicbrainz.mmd2.*;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.lang.reflect.Method;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -127,5 +135,95 @@ public abstract class AbstractMBWriterTest extends SolrTestCaseJ4 implements
 		thrown.expectMessage(MBXMLWriter.UNMARSHALLING_STORE_FAILED +
 				"invalid");
 		h.query(req("q", "*:*", "fl", "score", "wt", getWritername()));
+	}
+
+	@Test
+	/**
+	 * Check that we only return an empty metadata list if the query contains
+	 * unknown field names.
+	 *
+	 * In this case, we just return a list containing 0 results, like the old
+	 * search server did.
+	 */
+	public void testUnknownFieldName() throws Exception {
+		SolrQueryResponse rsp = new SolrQueryResponse();
+		Writer writer = new StringWriter();
+		SolrQueryRequest request = req("q", "unknownFieldname:value", "wt", getWritername());
+		MBXMLWriter queryResponseWriter = (MBXMLWriter) h.getCore().getQueryResponseWriter(getWritername());
+		h.getCore().execute(h.getCore().getRequestHandler("/select"), request, rsp);
+		queryResponseWriter.write(writer, request, rsp);
+
+		StringReader reader = new StringReader(writer.toString());
+		Metadata unmarshalledObj = (Metadata) queryResponseWriter.unmarshaller.unmarshal(reader);
+		Object MMDList = null;
+		switch (queryResponseWriter.entityType) {
+			case annotation:
+				MMDList = unmarshalledObj.getAnnotationList();
+				break;
+			case area:
+				MMDList = unmarshalledObj.getAreaList();
+				break;
+			case artist:
+				MMDList = unmarshalledObj.getArtistList();
+				break;
+			case cdstub:
+				MMDList = unmarshalledObj.getCdstubList();
+				break;
+			case editor:
+				MMDList = unmarshalledObj.getEditorList();
+				break;
+			case event:
+				MMDList = unmarshalledObj.getEventList();
+				break;
+			case instrument:
+				MMDList = unmarshalledObj.getInstrumentList();
+				break;
+			case label:
+				MMDList = unmarshalledObj.getLabelList();
+				break;
+			case place:
+				MMDList = unmarshalledObj.getPlaceList();
+				break;
+			case recording:
+				MMDList = unmarshalledObj.getRecordingList();
+				break;
+			case release:
+				MMDList = unmarshalledObj.getReleaseList();
+				break;
+			case release_group:
+				MMDList = unmarshalledObj.getReleaseGroupList();
+				break;
+			case series:
+				MMDList = unmarshalledObj.getSeriesList();
+				break;
+			case tag:
+				MMDList = unmarshalledObj.getTagList();
+				break;
+			case work:
+				MMDList = unmarshalledObj.getWorkList();
+				break;
+			case url:
+				MMDList = unmarshalledObj.getUrlList();
+				break;
+			default:
+				// This should never happen because MBXMLWriters init method
+				// aborts earlier
+				throw new RuntimeException("Testing with an invalid entitytype: " + queryResponseWriter.entityType.name());
+		}
+
+		Method getCountMethod = null;
+		Method getOffsetMethod = null;
+		try {
+			getCountMethod = MMDList.getClass().getMethod("getCount");
+			getOffsetMethod = MMDList.getClass().getMethod("getOffset");
+		} catch (NoSuchMethodException | SecurityException e) {
+			throw new RuntimeException(e);
+		}
+
+		BigInteger count = (BigInteger) getCountMethod.invoke(MMDList);
+		BigInteger offset = (BigInteger) getOffsetMethod.invoke(MMDList);
+
+		assertEquals(count.compareTo(BigInteger.valueOf(0)), 0);
+		assertEquals(offset.compareTo(BigInteger.valueOf(0)), 0);
 	}
 }

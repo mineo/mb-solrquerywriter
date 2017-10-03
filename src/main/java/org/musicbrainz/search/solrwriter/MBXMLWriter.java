@@ -68,16 +68,16 @@ public class MBXMLWriter implements QueryResponseWriter {
 	 * The context used to (un-)serialize XML
 	 */
 	private JAXBContext context = null;
-	private Unmarshaller unmarshaller = null;
+	protected Unmarshaller unmarshaller = null;
 	protected Marshaller marshaller = null;
 	private ObjectFactory objectfactory = null;
 
 	/**
 	 * The entity type of this MBXMLWriter
 	 */
-	private entityTypes entityType = null;
+	protected entityTypes entityType = null;
 
-	private enum entityTypes {
+	protected enum entityTypes {
 		annotation, artist, area, cdstub, editor, event, instrument, label, place, recording,
 		release, release_group, series, tag, work, url;
 
@@ -321,6 +321,11 @@ public class MBXMLWriter implements QueryResponseWriter {
 		NamedList vals = res.getValues();
 
 		ResultContext con = (ResultContext) vals.get("response");
+		if (con == null) {
+			metadatalistwrapper.setCountAndOffset(0, 0);
+			write(writer, metadatalistwrapper);
+			return;
+		}
 		DocList doclist = con.getDocList();
 
 		metadatalistwrapper.setCountAndOffset(doclist.matches(),
@@ -381,6 +386,10 @@ public class MBXMLWriter implements QueryResponseWriter {
 			xmlList.add(unmarshalledObj);
 		}
 
+		write(writer, metadatalistwrapper);
+	}
+
+	private void write(Writer writer, MetadataListWrapper metadatalistwrapper) throws IOException {
 		StringWriter sw = new StringWriter();
 		try {
 			marshaller.marshal(metadatalistwrapper.getCompletedMetadata(), sw);
